@@ -1,5 +1,8 @@
 /* CLI: apply migrations to DATABASE_URL. Usage: pnpm db:migrate */
-import "dotenv/config";
+import { config } from "dotenv";
+
+config({ path: ".env.local" });
+config({ path: ".env" });
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
