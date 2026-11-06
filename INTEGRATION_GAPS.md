@@ -38,7 +38,9 @@ What the official documentation at <https://app.precisebuilder.com/docs/> (REST 
 17. **Sales stages** have `status` only in `GET /sales-stages`. Stages seen only embedded in an opportunity are stored with a null status and no position.
 18. **Found on the live account (2026-11-06):**
    - `GET /users` returns some users with `name: null` (3 of 14). The docs list `name` as a string. The app accepts null and leaves those users out of the automatic name match with sales reps.
-   - Opportunities include a `status` field that the docs don't list. The app ignores it and keeps deriving open/won/lost from the sales stage's documented `status`.
+   - Some archived opportunities have `sales_stage: null` (2 of 33). The app already treats the stage as optional; these records are archived, so they don't affect pipeline metrics.
+
+Questions and mismatches to send to Precise Builder are tracked in [PB_DOCS_FEEDBACK.md](PB_DOCS_FEEDBACK.md).
 
 ## Webhook gaps
 

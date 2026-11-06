@@ -74,12 +74,96 @@ async function check() {
     const fields = ["revenue", "closed_at", "created_date", "sales_rep", "sales_stage", "job_type", "temperature", "lost_reason", "archived"] as const;
     const present = fields.map((f) => `${f}=${sample[f] === null || sample[f] === undefined ? "null" : "set"}`).join(", ");
     console.log(`\nSample opportunity fields: ${present}`);
-    const extra = Object.keys(sample).filter((k) => !["id", "number", "customer", "description", "notes", "site_address", "completed_at", ...fields].includes(k));
-    if (extra.length) console.log(`Undocumented extra fields returned (kept, not used): ${extra.join(", ")}`);
   }
+
+  if (!results.some((r) => !r.ok) || process.argv.includes("--audit")) await audit(client, stages?.map((s) => ({ id: s.id, status: s.status ?? null })) ?? []);
+
   const failed = results.filter((r) => !r.ok).length;
   console.log(failed ? `\n${failed} check(s) failed.` : "\nAll checks passed. Nothing was written to PB or to a database.");
   if (failed) process.exitCode = 1;
+}
+
+/**
+ * Compares a larger raw sample of every documented read endpoint with the field tables in
+ * PB's docs. Prints field names, types and counts only. Feeds PB_DOCS_FEEDBACK.md.
+ */
+async function audit(client: import("@/server/pb/client").HttpPbClient, stages: { id: string; status: string | null }[]) {
+  const { DOC_SPECS, auditRecords, findings, newAudit } = await import("@/server/pb/audit");
+  const data = (r: unknown) => ((r as { data?: unknown[] })?.data ?? []) as Record<string, unknown>[];
+  const sections: { title: string; result: ReturnType<typeof newAudit>; nullable?: string[] }[] = [];
+  const add = (title: string, spec: (typeof DOC_SPECS)[keyof typeof DOC_SPECS], records: unknown[], nullable?: string[]) => {
+    const existing = sections.find((s) => s.title === title);
+    const result = existing?.result ?? newAudit();
+    auditRecords(result, spec, records);
+    if (!existing) sections.push({ title, result, nullable });
+  };
+  const errors: string[] = [];
+  const raw = async (path: string, query?: Record<string, string>) => {
+    try {
+      return await client.getRaw(path, query);
+    } catch (e) {
+      errors.push(`${path}: ${(e as Error).message}`);
+      return null;
+    }
+  };
+
+  for (const p of ["sales-reps", "job-types", "lead-sources", "lost-reasons", "users"]) add(`GET /api/v1/${p}`, DOC_SPECS.lookup, data(await raw(`/api/v1/${p}`)));
+  add("GET /api/v1/sales-stages", DOC_SPECS["sales stage"], data(await raw("/api/v1/sales-stages")));
+
+  const customerNullable = ["billing_address", "current_opportunity"];
+  const customers = data(await raw("/api/v1/customers", { limit: "200", include_archived: "true" }));
+  add("customers (list)", DOC_SPECS.customer, customers, customerNullable);
+  if (customers[0]?.id) add("customers (single GET)", DOC_SPECS.customer, [await raw(`/api/v1/customers/${encodeURIComponent(String(customers[0].id))}`)], customerNullable);
+
+  // closed_at is "when it was won or lost", so null is expected on pending ones; lost_reason likewise.
+  const oppNullable = ["site_address", "completed_at"];
+  const opps: Record<string, unknown>[] = [];
+  const statusFilterMismatch: string[] = [];
+  for (const status of ["pending", "won", "lost"]) {
+    const page = data(await raw("/api/v1/opportunities", { limit: "100", status, include_archived: "true" }));
+    const off = page.filter((o) => o.status !== status).length;
+    if (off) statusFilterMismatch.push(`status=${status} returned ${off} of ${page.length} with another status`);
+    opps.push(...page);
+  }
+  add("opportunities (list)", DOC_SPECS.opportunity, opps, oppNullable);
+  if (opps[0]?.id) add("opportunities (single GET)", DOC_SPECS.opportunity, [await raw(`/api/v1/opportunities/${encodeURIComponent(String(opps[0].id))}`)], oppNullable);
+
+  // Docs: an opportunity's status "follows the stage" (the stage's status in GET /sales-stages).
+  const stageStatus = new Map(stages.map((s) => [s.id, s.status]));
+  const notFollowing = opps.filter((o) => {
+    const sid = (o.sales_stage as { id?: string } | null)?.id;
+    return sid && stageStatus.has(sid) && stageStatus.get(sid) !== o.status;
+  }).length;
+  const pendingWithClosedAt = opps.filter((o) => o.status === "pending" && o.closed_at).length;
+  const closedWithoutClosedAt = opps.filter((o) => o.status !== "pending" && !o.closed_at).length;
+
+  let activityCount = 0;
+  let oppsChecked = 0;
+  for (const o of opps.filter((o) => o.status === "pending").concat(opps.filter((o) => o.status !== "pending"))) {
+    if (oppsChecked >= 100 || activityCount >= 60) break;
+    oppsChecked++;
+    const acts = data(await raw(`/api/v1/opportunities/${encodeURIComponent(String(o.id))}/activities`));
+    activityCount += acts.length;
+    add("activities", DOC_SPECS.activity, acts, ["completed_at", "begin_time"]);
+  }
+
+  console.log("\nDocs audit: live responses compared with the field tables in PB's docs");
+  console.log("(field names and counts only; no record contents)\n");
+  for (const s of sections) {
+    const f = findings(s.result, new Set(s.nullable ?? []));
+    const mism = f.filter((x) => x.severity === "mismatch");
+    const notes = f.filter((x) => x.severity === "note");
+    console.log(`  ${s.title} - ${s.result.records} records${f.length ? "" : ": matches the docs"}`);
+    for (const x of mism) console.log(`      MISMATCH  ${x.text}`);
+    for (const x of notes) console.log(`      null      ${x.text.replace(/^`([^`]+)` was null in /, "$1: null in ")}`);
+  }
+  console.log(`  activities sampled from ${oppsChecked} opportunities`);
+  console.log("\n  Documented behavior checks:");
+  console.log(`      ${notFollowing ? "MISMATCH" : "ok      "}  opportunity status follows its stage's status (${notFollowing} of ${opps.length} don't)`);
+  console.log(`      ${statusFilterMismatch.length ? "MISMATCH" : "ok      "}  status filter returns only that status${statusFilterMismatch.length ? `: ${statusFilterMismatch.join("; ")}` : ""}`);
+  console.log(`      ${pendingWithClosedAt ? "MISMATCH" : "ok      "}  pending opportunities have no closed_at (${pendingWithClosedAt} do)`);
+  console.log(`      ${closedWithoutClosedAt ? "MISMATCH" : "ok      "}  won/lost opportunities have closed_at (${closedWithoutClosedAt} don't)`);
+  for (const e of errors) console.log(`      ERROR     ${e}`);
 }
 
 async function sync(mode: "full" | "reconcile") {

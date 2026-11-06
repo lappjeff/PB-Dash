@@ -4,6 +4,7 @@ Sales dashboards, team reporting and follow-up queues built on top of **Precise 
 
 - **Stack:** Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind v4 + shadcn/ui (Base UI) · Apache ECharts · TanStack Table v9 · Drizzle ORM · Neon PostgreSQL · Clerk · Vitest · Playwright
 - **Integration gaps:** see [INTEGRATION_GAPS.md](INTEGRATION_GAPS.md). Read it before go-live.
+- **Feedback for Precise Builder:** [PB_DOCS_FEEDBACK.md](PB_DOCS_FEEDBACK.md) is a running list of doc mismatches and open questions to report. `pnpm sync:check` ends with a docs audit that feeds it.
 
 ## Quick start (demo mode, no credentials)
 

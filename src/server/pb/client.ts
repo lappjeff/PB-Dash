@@ -149,6 +149,11 @@ export class HttpPbClient implements PbClient {
     return r.data;
   }
 
+  /** Unparsed JSON from a documented GET path; used by the read-only docs audit (`pnpm sync:check`). */
+  getRaw(path: string, query?: Record<string, string | undefined>): Promise<unknown> {
+    return this.get(path, z.unknown(), query);
+  }
+
   private async getOrNull<T extends z.ZodTypeAny>(path: string, schema: T): Promise<z.infer<T> | null> {
     try {
       return await this.get(path, schema);
