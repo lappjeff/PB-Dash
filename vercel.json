@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/cron/process-events", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/reconcile", "schedule": "17 * * * *" },
-    { "path": "/api/cron/full-sync", "schedule": "30 8 * * *" }
+    { "path": "/api/cron/full-sync", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/process-events", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/reconcile", "schedule": "0 10 * * *" }
   ]
 }

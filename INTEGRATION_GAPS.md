@@ -14,11 +14,11 @@ What the official documentation at <https://app.precisebuilder.com/docs/> (REST 
 ## REST API gaps
 
 1. **No "updated at" timestamp** on opportunities or customers, and **no updated-since filter** on the list endpoints.
-   - True incremental polling isn't possible. Webhooks carry incremental changes. Hourly reconciliation re-reads every open (`status=pending`) opportunity, and fetches opportunities that are open locally but no longer open in PB one at a time. A daily full pass re-reads everything.
+   - True incremental polling isn't possible. Webhooks carry incremental changes. Daily reconciliation (it can be made hourly on Vercel Pro) re-reads every open (`status=pending`) opportunity, and fetches opportunities that are open locally but no longer open in PB one at a time. A daily full pass re-reads everything.
    - "Last change" in the UI is the **last change this app observed** (`last_changed_at`). It stays empty ("Not observed") until a change is seen after the initial import. The app never presents import time as the PB update time.
    - The spec's `pb_updated_at` column is implemented as `last_pb_event_at`: the newest webhook `created_at` seen for the record.
 2. **Activities can only be listed per opportunity** (`GET /opportunities/<id>/activities`, not paged). There is no account-wide activity list.
-   - One call per opportunity. Activities are synced for **open** opportunities: all of them during a full pass, a rotating batch of 40 per hourly reconciliation, and immediately for the opportunity named in `activity.created` / `activity.completed` / `opportunity.created`.
+   - One call per opportunity. Activities are synced for **open** opportunities: all of them during a full pass, a rotating batch of 40 per reconciliation run, and immediately for the opportunity named in `activity.created` / `activity.completed` / `opportunity.created`.
    - A full pass also reads each **closed** (non-archived) opportunity's activities **once**, so the first import includes their history. After that, a closed opportunity's activities change only through webhooks or if it reopens.
 3. **Activities have no created timestamp.** `pb_created_at` is filled only from the `activity.created` webhook envelope, so it's null for imported activities.
 4. **Activities are assigned to *users* (`GET /users`), not sales reps (`GET /sales-reps`).** The docs don't say whether the ids match.

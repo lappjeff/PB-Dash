@@ -160,15 +160,15 @@ Money is stored and summed as integer cents (`bigint`). Timestamps are `timestam
 5. Run `pnpm db:migrate` against the Neon URL from your machine. Optionally add it as a step in your release process.
 6. Deploy, then register the webhook (above) and run `pnpm sync:full` locally against the production database.
 
-**Cron.** `vercel.json` schedules:
+**Cron.** `vercel.json` runs each job once a day, because Vercel's free Hobby plan allows daily jobs only, and each run starts somewhere within its scheduled hour. Times are UTC; 07:00 UTC is 2–3 am Eastern.
 
 | Route | Schedule | Purpose |
 | --- | --- | --- |
-| `/api/cron/process-events` | every 5 min | Retries the webhook queue |
-| `/api/cron/reconcile` | hourly | Reconciliation; also prunes old payloads |
-| `/api/cron/full-sync` | daily 08:30 UTC | Consistency pass, resumes if cut off |
+| `/api/cron/full-sync` | daily 07:00 UTC | Consistency pass; finds deletions; resumes if cut off |
+| `/api/cron/process-events` | daily 09:00 UTC | Retries webhooks whose processing failed |
+| `/api/cron/reconcile` | daily 10:00 UTC | Reconciles open opportunities; prunes old payloads |
 
-> **Vercel Hobby plans only allow once-per-day cron jobs. A deploy with the schedules above fails on Hobby.** Use Pro, or change both frequent schedules to daily and accept slower recovery from missed webhooks. Webhooks themselves are processed immediately regardless of plan.
+Webhooks are processed the moment they arrive, whatever the plan. The daily jobs only repair what a lost or failed webhook missed, so on Hobby such a gap can last until the next morning. An admin can run a sync at any time from **Settings**. On Vercel Pro you can tighten the schedules, for example `*/5 * * * *` for process-events and `17 * * * *` for reconcile.
 
 Function `maxDuration` is 300s for sync routes. Each job stops at about 240s, saves a checkpoint, and resumes on the next run.
 
