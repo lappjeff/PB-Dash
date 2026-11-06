@@ -6,7 +6,7 @@ What the official documentation at <https://app.precisebuilder.com/docs/> (REST 
 
 | Area | Status |
 | --- | --- |
-| REST client (`src/server/pb/client.ts`) | Built from the documented paths, fields and paging. Tested only against mocked responses and fixtures shaped from the docs. **Not yet run against a live PB account** (no API key was available). Run `pnpm sync:check` first when you have credentials. |
+| REST client (`src/server/pb/client.ts`) | **Read-only check passed against the live account on 2026-11-06** (`pnpm sync:check`): every endpoint the sync uses answered, and responses matched the documented schemas after the fix in REST gap 18. A full import (`pnpm sync:full`) hasn't been run yet. |
 | Webhook signature check | Verified against the official test vector on the "Verifying signatures" page (`tests/webhooks.test.ts`). |
 | Webhook delivery from PB | **Not tested end to end.** PB only delivers to a public `https://` URL, so this needs a deployment. Use **Send Test** (a `webhook.ping`) after registering the endpoint. |
 | Vercel deployment | **Not done.** It needs your Vercel, Neon and Clerk accounts. |
@@ -36,6 +36,9 @@ What the official documentation at <https://app.precisebuilder.com/docs/> (REST 
 15. **The API key is account-wide, can write, and there is one key per account.** This app only issues `GET` requests. Generating a new key in PB immediately breaks the old one, so update `PRECISE_BUILDER_API_KEY` at the same time.
 16. **No documented web deep-link format** for opportunities. The detail page shows the job number instead of linking into PB.
 17. **Sales stages** have `status` only in `GET /sales-stages`. Stages seen only embedded in an opportunity are stored with a null status and no position.
+18. **Found on the live account (2026-11-06):**
+   - `GET /users` returns some users with `name: null` (3 of 14). The docs list `name` as a string. The app accepts null and leaves those users out of the automatic name match with sales reps.
+   - Opportunities include a `status` field that the docs don't list. The app ignores it and keeps deriving open/won/lost from the sales stage's documented `status`.
 
 ## Webhook gaps
 

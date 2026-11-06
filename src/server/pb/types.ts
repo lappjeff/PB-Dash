@@ -31,6 +31,9 @@ export const pbLookupEntry = z.object({ id: z.string(), name: z.string() }).pass
 export const pbSalesStage = pbLookupEntry.extend({ status: pbStatus.nullable().optional() });
 export type PbLookupEntry = z.infer<typeof pbLookupEntry>;
 export type PbSalesStage = z.infer<typeof pbSalesStage>;
+/** Live PB returns some users with `name: null` (not in the docs); they can't be name-matched. */
+export const pbUser = z.object({ id: z.string(), name: z.string().nullable() }).passthrough();
+export type PbUser = z.infer<typeof pbUser>;
 
 export const listOf = <T extends z.ZodTypeAny>(item: T) => z.object({ data: z.array(item) });
 export const pageOf = <T extends z.ZodTypeAny>(item: T) =>

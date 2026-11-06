@@ -5,11 +5,13 @@ import {
   pbActivity,
   pbCustomer,
   pbLookupEntry,
+  pbUser,
   pbOpportunity,
   pbSalesStage,
   type PbActivity,
   type PbCustomer,
   type PbLookupEntry,
+  type PbUser,
   type PbOpportunity,
   type PbSalesStage,
   type PbStatus,
@@ -36,7 +38,7 @@ export interface PbClient {
   listJobTypes(): Promise<PbLookupEntry[]>;
   listLeadSources(): Promise<PbLookupEntry[]>;
   listLostReasons(): Promise<PbLookupEntry[]>;
-  listUsers(): Promise<PbLookupEntry[]>;
+  listUsers(): Promise<PbUser[]>;
   listCustomers(p: ListCustomersParams): Promise<Page<PbCustomer>>;
   /** Returns null on 404. */
   getCustomer(id: string): Promise<PbCustomer | null>;
@@ -109,7 +111,7 @@ export class HttpPbClient implements PbClient {
     return this.get("/api/v1/lost-reasons", listOf(pbLookupEntry)).then((r) => r.data);
   }
   listUsers() {
-    return this.get("/api/v1/users", listOf(pbLookupEntry)).then((r) => r.data);
+    return this.get("/api/v1/users", listOf(pbUser)).then((r) => r.data);
   }
 
   async listCustomers(p: ListCustomersParams): Promise<Page<PbCustomer>> {

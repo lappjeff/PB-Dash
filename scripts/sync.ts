@@ -50,7 +50,7 @@ async function check() {
   await run("GET /api/v1/job-types", () => client.listJobTypes(), (r) => `${r.length} job types`);
   await run("GET /api/v1/lead-sources", () => client.listLeadSources(), (r) => `${r.length} lead sources`);
   await run("GET /api/v1/lost-reasons", () => client.listLostReasons(), (r) => `${r.length} lost reasons`);
-  await run("GET /api/v1/users", () => client.listUsers(), (r) => `${r.length} users`);
+  await run("GET /api/v1/users", () => client.listUsers(), (r) => `${r.length} users${r.some((u) => !u.name) ? ` (${r.filter((u) => !u.name).length} without a name; skipped for rep matching)` : ""}`);
   await run("GET /api/v1/customers?limit=5", () => client.listCustomers({ limit: 5 }), (r) => `${r.data.length} rows, more pages: ${r.nextCursor ? "yes" : "no"}`);
   const opps = await run(
     "GET /api/v1/opportunities?limit=5&status=pending",

@@ -14,7 +14,7 @@ import {
 } from "@/db/schema";
 import { toCents } from "@/lib/money";
 import { activityDueAt, LOCAL_DATE_RE } from "@/lib/time";
-import type { PbActivity, PbCustomer, PbLookupEntry, PbOpportunity, PbSalesStage } from "@/server/pb/types";
+import type { PbActivity, PbCustomer, PbLookupEntry, PbOpportunity, PbSalesStage, PbUser } from "@/server/pb/types";
 import type { PbClient } from "@/server/pb/client";
 
 type Ref = { id: string; name?: string | null } | null | undefined;
@@ -140,9 +140,10 @@ async function upsertStages(db: Db, stages: PbSalesStage[]) {
  * which activities are assigned to. Map them by exact, unique, case-insensitive
  * name match, only where an admin has not set a mapping.
  */
-async function autoMapUsers(db: Db, pbUsers: PbLookupEntry[]) {
+async function autoMapUsers(db: Db, pbUsers: PbUser[]) {
   const byName = new Map<string, string[]>();
   for (const u of pbUsers) {
+    if (!u.name?.trim()) continue;
     const k = u.name.trim().toLowerCase();
     byName.set(k, [...(byName.get(k) ?? []), u.id]);
   }

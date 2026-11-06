@@ -21,6 +21,11 @@ describe("HttpPbClient", () => {
     expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer pbk_test");
   });
 
+  it("accepts users whose name is null (seen on a live account)", async () => {
+    const f = async () => json({ data: [{ id: "u1", name: "Ann Lee" }, { id: "u2", name: null }] });
+    expect(await client(f as unknown as typeof fetch).listUsers()).toEqual([{ id: "u1", name: "Ann Lee" }, { id: "u2", name: null }]);
+  });
+
   it("returns null for 404 on single-record reads", async () => {
     const f = async () => json({ errors: [{ status: "404", code: "not-found", detail: "No such record" }] }, 404);
     expect(await client(f as unknown as typeof fetch).getOpportunity("nope")).toBeNull();

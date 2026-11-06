@@ -21,6 +21,13 @@ describe("full import", () => {
     expect(JSON.stringify(c!.rawData)).not.toContain("example.com");
   });
 
+  it("imports when some PB users have no name", async () => {
+    const data = smallDataset();
+    data.users.push({ id: "user-nameless", name: null });
+    const { db } = await importedDb(data);
+    expect((await db.select().from(salespeople)).some((s) => s.pbUserId === "user-nameless")).toBe(false);
+  });
+
   it("resumes from a checkpoint when the time budget runs out", async () => {
     const db = await freshDb();
     const client = new FixturePbClient(smallDataset());

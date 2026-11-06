@@ -1,9 +1,9 @@
 import type { ListCustomersParams, ListOpportunitiesParams, Page, PbClient } from "./client";
-import type { PbActivity, PbCustomer, PbLookupEntry, PbOpportunity, PbSalesStage } from "./types";
+import type { PbActivity, PbCustomer, PbLookupEntry, PbOpportunity, PbSalesStage, PbUser } from "./types";
 
 export type FixtureDataset = {
   salesReps: PbLookupEntry[];
-  users: PbLookupEntry[];
+  users: PbUser[];
   salesStages: PbSalesStage[];
   jobTypes: PbLookupEntry[];
   leadSources: PbLookupEntry[];
