@@ -4,7 +4,9 @@ async function viewAs(page: Page, label: RegExp) {
   await page.goto("/dashboard");
   const select = page.getByLabel("Viewing as");
   const value = await select.locator("option", { hasText: label }).first().getAttribute("value");
+  const switched = page.waitForResponse((r) => r.url().endsWith("/api/demo/switch-user") && r.ok());
   await select.selectOption(value!);
+  await switched;
   await page.waitForURL(/\/(dashboard|my-dashboard)/);
 }
 
