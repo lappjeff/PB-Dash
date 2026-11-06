@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { opportunities, opportunitySnapshots, stageTransitions, syncRuns, salespeople } from "@/db/schema";
+import { activities, opportunities, opportunitySnapshots, stageTransitions, syncRuns, salespeople } from "@/db/schema";
 import { FixturePbClient } from "@/server/pb/fixture-client";
 import { runFullSync, runReconcile } from "@/server/sync/runs";
 import { freshDb, importedDb, TZ } from "./support/db";
-import { smallDataset, STAGE } from "./support/fixtures";
+import { activity, smallDataset, STAGE } from "./support/fixtures";
 
 describe("full import", () => {
   it("imports all pages, links records and creates initial snapshots but no fabricated history", async () => {
@@ -19,6 +19,19 @@ describe("full import", () => {
     // Contact details are not kept in raw_data.
     const c = await db.query.customers.findFirst();
     expect(JSON.stringify(c!.rawData)).not.toContain("example.com");
+  });
+
+  it("reads activities of closed opportunities once, and of open ones every pass", async () => {
+    const data = smallDataset();
+    data.activities.o6 = [activity("a-lost", "o6", "2026-02-01")];
+    const client = new FixturePbClient(data);
+    const db = await freshDb();
+    await runFullSync({ db, client, tz: TZ, trigger: "cli" });
+    expect((await db.select().from(activities)).map((a) => a.pbId)).toContain("a-lost");
+    client.calls = [];
+    await runFullSync({ db, client, tz: TZ, trigger: "cli" });
+    expect(client.calls).not.toContain("activities:o6");
+    expect(client.calls).toContain("activities:o1");
   });
 
   it("imports when some PB users have no name", async () => {

@@ -19,7 +19,7 @@ What the official documentation at <https://app.precisebuilder.com/docs/> (REST 
    - The spec's `pb_updated_at` column is implemented as `last_pb_event_at`: the newest webhook `created_at` seen for the record.
 2. **Activities can only be listed per opportunity** (`GET /opportunities/<id>/activities`, not paged). There is no account-wide activity list.
    - One call per opportunity. Activities are synced for **open** opportunities: all of them during a full pass, a rotating batch of 40 per hourly reconciliation, and immediately for the opportunity named in `activity.created` / `activity.completed` / `opportunity.created`.
-   - Activity history for closed opportunities is only as complete as what was synced while they were open.
+   - A full pass also reads each **closed** (non-archived) opportunity's activities **once**, so the first import includes their history. After that, a closed opportunity's activities change only through webhooks or if it reopens.
 3. **Activities have no created timestamp.** `pb_created_at` is filled only from the `activity.created` webhook envelope, so it's null for imported activities.
 4. **Activities are assigned to *users* (`GET /users`), not sales reps (`GET /sales-reps`).** The docs don't say whether the ids match.
    - Users are matched to sales reps by identical, unique, case-insensitive name during each lookup sync. Admins can correct the match under **Settings → Activity assignment mapping**. Unmapped activities still count toward the opportunity owner's overdue/follow-up rules, because those rules key off the opportunity's sales rep.

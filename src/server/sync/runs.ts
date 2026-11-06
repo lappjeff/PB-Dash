@@ -98,7 +98,7 @@ type FullCheckpoint = {
 /**
  * Full import / consistency pass:
  *   lookups -> all customers -> all opportunities (incl. archived) ->
- *   activities of open opportunities -> mark records PB no longer returns.
+ *   activities of open opportunities (and closed ones never read) -> mark records PB no longer returns.
  * Resumable: when the time budget runs out the run ends as "partial" and the next
  * full run continues from the stored checkpoint.
  */
@@ -154,7 +154,8 @@ export async function runFullSync(opts: SyncOptions): Promise<SyncOutcome> {
           .from(opportunities)
           .where(
             and(
-              eq(opportunities.status, "pending"),
+              // Open ones every pass; closed ones once, so the first import includes their history.
+              or(eq(opportunities.status, "pending"), isNull(opportunities.activitiesSyncedAt)),
               eq(opportunities.archived, false),
               isNull(opportunities.pbMissingAt),
               gt(opportunities.id, cp.lastOppId),
