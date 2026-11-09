@@ -47,6 +47,15 @@ Status values: **Open** (not yet reported), **Reported** (sent to PB, waiting), 
 | 2.13 | Employee changes | Zapier has an "Updated Employee" trigger, but webhooks have no employee or user event. Is one planned? | Open |
 | 2.14 | `activity.*` payloads | The webhook gives the assignee as `assigned_to` (a name string), but REST gives `assigned_user {id, name}`. Can the webhook include the user id? | Open |
 
+### Invoices and vendors
+
+| # | Topic | Detail | Status |
+| --- | --- | --- | --- |
+| 2.19 | No REST read for invoices or vendors | Both exist only as webhooks (`invoice.created`, `vendor.*`). Integrations can't import history or recover a missed event. Request: `GET /api/v1/invoices` (filterable by job and date) and `GET /api/v1/vendors`. | Open |
+| 2.20 | No invoice lifecycle events | There's no `invoice.updated`, `invoice.voided` or `invoice.paid`, so `void` and amounts are only known as of creation, and payments aren't available at all. | Open |
+| 2.21 | `invoice.type` values | The sample shows `"job"`; the other possible values aren't listed. Can `job` be null for non-job invoices? | Open |
+| 2.22 | `invoice.total` | Is it before or after tax, and does it include retainage or credits? | Open |
+
 ### Archived records
 
 | # | Topic | Detail | Status |

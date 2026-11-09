@@ -146,7 +146,7 @@ Money is stored and summed as integer cents (`bigint`). Timestamps are `timestam
 1. Deploy first. PB only accepts a public `https://` URL on port 443 with no redirects.
 2. In PB: **Settings → Integrations → REST API → Webhooks → Add Endpoint**.
    - **URL:** `https://<your-app>/api/webhooks/precise-builder`
-   - **Events:** `customer.created`, `customer.updated`, `opportunity.created`, `opportunity.stage_updated`, `job.updated`, `activity.created`, `activity.completed`. Invoice and vendor events are accepted but ignored.
+   - **Events:** `customer.created`, `customer.updated`, `opportunity.created`, `opportunity.stage_updated`, `job.updated`, `activity.created`, `activity.completed`, `invoice.created`, `vendor.created`, `vendor.updated`. Invoices appear on each opportunity's page; vendors are stored (name and company only) for later use.
 3. Copy the signing secret into `PRECISE_BUILDER_WEBHOOK_SECRET` and redeploy.
 4. Click **Send Test** in PB. It should show success, and **Settings → Synchronization** in this app should count a processed event.
 5. **If PB disables the endpoint** after repeated failures, events are not queued. Fix the problem, re-enable the endpoint, use **Redeliver Failed** in PB, then run **Full sync** here.

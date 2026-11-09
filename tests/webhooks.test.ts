@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { opportunities, stageTransitions, webhookEvents, activities } from "@/db/schema";
+import { opportunities, stageTransitions, webhookEvents, activities, invoices, vendors } from "@/db/schema";
+import { getOpportunityDetail } from "@/server/metrics/opportunities";
 import { signPreciseBody, verifyPreciseSignature } from "@/server/pb/signature";
 import { ingestWebhook } from "@/server/webhooks/ingest";
 import { processPendingEvents } from "@/server/webhooks/process";
@@ -135,10 +136,10 @@ describe("processing", () => {
     expect(ev.errorMessage).toBe("newer data already stored");
   });
 
-  it("ignores unknown and unused event types without failing", async () => {
+  it("ignores unknown event types without failing", async () => {
     const { db, client } = await importedDb();
     await deliver(db, envelope("something.new", "thing", "x1"));
-    await deliver(db, envelope("invoice.created", "invoice", "i1"));
+    await deliver(db, envelope("other.thing", "thing", "x2"));
     const s = await processPendingEvents({ db, client, tz: TZ });
     expect(s).toMatchObject({ ignored: 2, failed: 0 });
     const rows = await db.select().from(webhookEvents);
@@ -171,5 +172,68 @@ describe("processing", () => {
     const [a] = await db.select().from(activities).where(eq(activities.pbId, "a1"));
     expect(a.status).toBe("completed");
     expect(a.salespersonId).not.toBeNull(); // user auto-mapped to rep by name
+  });
+});
+
+const invoiceEvent = (id: string, jobId: string | null, total: number, opts: { void?: boolean; createdAt?: string } = {}) =>
+  envelope(
+    "invoice.created",
+    "invoice",
+    id,
+    {
+      invoice: { id, number: "1001", type: "job", date: "2026-02-21", due_date: "2026-03-21", total, void: opts.void ?? false },
+      customer: { id: "c1", name: "Jane Smith", email: "jane@example.com", phone: "555-555-0100" },
+      job: jobId ? { id: jobId, name: "Smith Kitchen Remodel" } : null,
+    },
+    opts.createdAt,
+  );
+
+describe("invoices and vendors (webhook-only data)", () => {
+  it("stores invoice.created linked to its opportunity and shows it on the detail page", async () => {
+    const { db, client } = await importedDb();
+    await deliver(db, invoiceEvent("i1", "o1", 12500.5));
+    await deliver(db, invoiceEvent("i2", "o1", 100, { void: true }));
+    expect(await processPendingEvents({ db, client, tz: TZ })).toMatchObject({ processed: 2, failed: 0 });
+    const [opp] = await db.select().from(opportunities).where(eq(opportunities.pbId, "o1"));
+    const [inv] = await db.select().from(invoices).where(eq(invoices.pbId, "i1"));
+    expect(inv).toMatchObject({ totalCents: 1250050, opportunityId: opp.id, invoiceDate: "2026-02-21", void: false });
+    const admin = { userId: 1, name: "A", email: null, role: "ADMIN" as const, salespersonId: null, isDemo: false };
+    const detail = await getOpportunityDetail(db, opp.id, admin);
+    expect(detail!.invoices).toHaveLength(2);
+    expect(detail!.invoicedCents).toBe(1250050);
+  });
+
+  it("imports an unknown job, keeps job-less invoices, and never lets an older event overwrite", async () => {
+    const { db, client } = await importedDb();
+    client.data.opportunities.push(opportunity({ id: "o-new", customer: client.data.customers[0], stage: STAGE.won, revenue: 5, created: "2026-02-01", closedAt: "2026-02-10T12:00:00+00:00" }));
+    await deliver(db, invoiceEvent("i3", "o-new", 50, { createdAt: "2026-02-22T00:00:00+00:00" }));
+    await deliver(db, invoiceEvent("i3", "o-new", 999, { createdAt: "2026-02-21T00:00:00+00:00" }));
+    await deliver(db, invoiceEvent("i4", null, 75));
+    expect(await processPendingEvents({ db, client, tz: TZ })).toMatchObject({ failed: 0 });
+    const [newOpp] = await db.select().from(opportunities).where(eq(opportunities.pbId, "o-new"));
+    expect(newOpp).toBeDefined();
+    const [i3] = await db.select().from(invoices).where(eq(invoices.pbId, "i3"));
+    expect(i3.totalCents).toBe(5000);
+    const [i4] = await db.select().from(invoices).where(eq(invoices.pbId, "i4"));
+    expect(i4.opportunityId).toBeNull();
+  });
+
+  it("stores vendor name and company only, newest event wins", async () => {
+    const { db, client } = await importedDb();
+    const v = (name: string, at: string) =>
+      envelope("vendor.updated", "vendor", "v1", { vendor: { id: "v1", name, company: `${name} Co.`, first_name: null, last_name: null, email: "orders@example.com", phone: "555-555-0101", billing_address: null } }, at);
+    await deliver(db, v("Acme Lumber", "2026-02-22T00:00:00+00:00"));
+    await deliver(db, v("Old Name", "2026-02-21T00:00:00+00:00"));
+    expect(await processPendingEvents({ db, client, tz: TZ })).toMatchObject({ processed: 2, failed: 0 });
+    const rows = await db.select().from(vendors);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ name: "Acme Lumber", company: "Acme Lumber Co." });
+    expect(JSON.stringify(rows[0])).not.toContain("example.com");
+  });
+
+  it("fails (and retries) an invoice payload that doesn't match the docs", async () => {
+    const { db, client } = await importedDb();
+    await deliver(db, envelope("invoice.created", "invoice", "i9", { invoice: { id: "i9", total: "lots" } }));
+    expect(await processPendingEvents({ db, client, tz: TZ })).toMatchObject({ failed: 1 });
   });
 });

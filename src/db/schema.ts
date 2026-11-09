@@ -225,6 +225,46 @@ export const activities = pgTable(
   ],
 );
 
+/**
+ * Invoices, known only from `invoice.created` webhooks: PB has no invoice REST endpoint and
+ * no update/void/payment events, so these are as of creation and only from go-live on.
+ */
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: serial("id").primaryKey(),
+    pbId: text("pb_id").notNull().unique(),
+    number: text("number"),
+    /** PB `type`; the docs show "job" and don't list other values. */
+    type: text("type"),
+    invoiceDate: date("invoice_date", { mode: "string" }),
+    dueDate: date("due_date", { mode: "string" }),
+    totalCents: cents("total_cents"),
+    void: boolean("void").notNull().default(false),
+    /** PB job (= opportunity) id from the payload; kept even if the opportunity isn't stored yet. */
+    pbJobId: text("pb_job_id"),
+    opportunityId: integer("opportunity_id").references(() => opportunities.id, { onDelete: "set null" }),
+    pbCustomerId: text("pb_customer_id"),
+    customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    /** Envelope created_at of the event the stored values came from. */
+    lastPbEventAt: ts("last_pb_event_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("invoices_opp_idx").on(t.opportunityId), index("invoices_job_idx").on(t.pbJobId), index("invoices_date_idx").on(t.invoiceDate)],
+);
+
+/** Vendors, known only from `vendor.*` webhooks. Contact details are deliberately not stored. */
+export const vendors = pgTable("vendors", {
+  id: serial("id").primaryKey(),
+  pbId: text("pb_id").notNull().unique(),
+  name: text("name"),
+  company: text("company"),
+  lastPbEventAt: ts("last_pb_event_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 /* ------------------------------------------------------------------ */
 /* History                                                             */
 /* ------------------------------------------------------------------ */

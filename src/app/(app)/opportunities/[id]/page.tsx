@@ -109,6 +109,33 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
         <Section title="Stage history" description="From PB stage-change webhooks (exact) and reconciliation (approximate)">
           <StageTimeline entries={o.transitions} tz={tz} />
         </Section>
+        <Section title="Invoices" description="From PB invoice webhooks since the integration went live. Later voids and payments aren't sent by PB.">
+          {o.invoices.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No invoices received for this job.</p>
+          ) : (
+            <>
+              <ul className="divide-y text-sm">
+                {o.invoices.map((i) => (
+                  <li key={i.id} className={`flex items-start justify-between gap-3 py-2 ${i.void ? "opacity-60" : ""}`}>
+                    <div>
+                      <div className={i.void ? "line-through decoration-muted-foreground/40" : ""}>Invoice {i.number ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {i.invoiceDate ? formatLocalDate(i.invoiceDate) : "No date"}
+                        {i.dueDate ? ` · due ${formatLocalDate(i.dueDate)}` : ""}
+                        {i.void ? " · void" : ""}
+                      </div>
+                    </div>
+                    <div className="shrink-0 font-medium tabular-nums">{formatCents(i.totalCents)}</div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 flex justify-between border-t pt-2 text-sm">
+                <span className="text-muted-foreground">Invoiced (excluding void)</span>
+                <span className="font-medium tabular-nums">{formatCents(o.invoicedCents)}</span>
+              </div>
+            </>
+          )}
+        </Section>
       </div>
     </>
   );

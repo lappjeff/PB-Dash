@@ -162,3 +162,42 @@ export const pbActivityEventData = z
     job: z.object({ id: z.string() }).passthrough().nullable().optional(),
   })
   .passthrough();
+
+/**
+ * data of invoice.created. PB has no invoice REST endpoint, so the payload is the only
+ * source. Only the documented fields used here are declared; customer contact details
+ * in the payload are not read.
+ */
+export const pbInvoiceEventData = z
+  .object({
+    object: z.object({ type: z.string(), id: z.string() }).passthrough(),
+    invoice: z
+      .object({
+        id: z.string(),
+        number: z.string().nullable().optional(),
+        type: z.string().nullable().optional(),
+        date: z.string().nullable().optional(),
+        due_date: z.string().nullable().optional(),
+        total: z.number().nullable().optional(),
+        void: z.boolean().nullable().optional(),
+      })
+      .passthrough(),
+    customer: z.object({ id: z.string() }).passthrough().nullable().optional(),
+    job: z.object({ id: z.string() }).passthrough().nullable().optional(),
+  })
+  .passthrough();
+export type PbInvoiceEventData = z.infer<typeof pbInvoiceEventData>;
+
+/** data of vendor.created / vendor.updated. Only name and company are read. */
+export const pbVendorEventData = z
+  .object({
+    object: z.object({ type: z.string(), id: z.string() }).passthrough(),
+    vendor: z
+      .object({
+        id: z.string(),
+        name: z.string().nullable().optional(),
+        company: z.string().nullable().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();

@@ -6,12 +6,13 @@ import { setDemoPbClient } from "@/server/pb";
 import { runFullSync } from "@/server/sync/runs";
 import { companyTimezone } from "@/env";
 import { generateDemoDataset } from "./dataset";
-import { simulateStageChanges } from "./simulate";
+import { simulateInvoices, simulateStageChanges } from "./simulate";
 import { monthBounds, todayLocal } from "@/lib/time";
 import { log } from "@/lib/logger";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createPgliteDb } from "@/db/pglite";
+import journal from "../../../drizzle/meta/_journal.json";
 import type { FixtureDataset } from "@/server/pb/fixture-client";
 
 const CACHE_DIR = path.join(process.cwd(), ".data");
@@ -22,7 +23,8 @@ const CACHE_DIR = path.join(process.cwd(), ".data");
  * restarts load in about a second. Delete .data/ to reseed.
  */
 export async function openDemoDb(): Promise<Db> {
-  const day = new Date().toISOString().slice(0, 10);
+  // Keyed by day and schema version, so a new migration never loads an outdated dump.
+  const day = `${new Date().toISOString().slice(0, 10)}-${journal.entries.at(-1)?.tag ?? "0"}`;
   const dump = path.join(CACHE_DIR, `demo-${day}.tar.gz`);
   const fixture = path.join(CACHE_DIR, `demo-${day}.json`);
   try {
@@ -83,5 +85,6 @@ export async function seedDemo(db: Db) {
   await db.insert(salesTargets).values(rows);
 
   await simulateStageChanges(db, 90, { spreadDays: 45 });
+  await simulateInvoices(db, 25);
   log.info("demo.seeded", { ms: Date.now() - started, processed: res.recordsProcessed });
 }

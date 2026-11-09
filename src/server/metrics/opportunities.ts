@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db";
-import { activities, stageTransitions, salesStages, salespeople } from "@/db/schema";
+import { activities, invoices, stageTransitions, salesStages, salespeople } from "@/db/schema";
 import { and_, inList, rows } from "@/db/sql";
 import { toInt, toIntOrNull } from "@/lib/money";
 import { canViewSalesperson, type SalespersonScope, type Viewer } from "@/server/authz";
@@ -163,7 +163,7 @@ export async function getOpportunityDetail(db: Db, id: number, viewer: Viewer) {
   // opportunity gets "not found" so ids cannot be probed.
   if (!canViewSalesperson(viewer, base.salespersonId)) return null;
 
-  const [acts, transitions] = await Promise.all([
+  const [acts, transitions, invs] = await Promise.all([
     db
       .select()
       .from(activities)
@@ -182,6 +182,12 @@ export async function getOpportunityDetail(db: Db, id: number, viewer: Viewer) {
       .leftJoin(salespeople, eq(salespeople.id, stageTransitions.salespersonId))
       .where(eq(stageTransitions.opportunityId, id))
       .orderBy(desc(stageTransitions.transitionedAt)),
+    // Matched on the PB job id too, so an invoice that arrived before the opportunity was imported still shows.
+    db
+      .select({ id: invoices.id, number: invoices.number, invoiceDate: invoices.invoiceDate, dueDate: invoices.dueDate, totalCents: invoices.totalCents, void: invoices.void })
+      .from(invoices)
+      .where(sql`${invoices.opportunityId} = ${id} or ${invoices.pbJobId} = (select pb_id from opportunities where id = ${id})`)
+      .orderBy(asc(invoices.invoiceDate), asc(invoices.id)),
   ]);
   const iso = (v: unknown) => (v ? new Date(String(v)).toISOString() : null);
   return {
@@ -206,6 +212,8 @@ export async function getOpportunityDetail(db: Db, id: number, viewer: Viewer) {
       removed: a.removedAt !== null,
     })),
     transitions: transitions.map((t) => ({ ...t, transitionedAt: t.transitionedAt.toISOString() })),
+    invoices: invs,
+    invoicedCents: invs.filter((i) => !i.void).reduce((sum, i) => sum + (i.totalCents ?? 0), 0),
   };
 }
 export type OpportunityDetail = NonNullable<Awaited<ReturnType<typeof getOpportunityDetail>>>;

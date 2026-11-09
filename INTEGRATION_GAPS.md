@@ -25,7 +25,7 @@ What the official documentation at <https://app.precisebuilder.com/docs/> (REST 
    - Users are matched to sales reps by identical, unique, case-insensitive name during each lookup sync. Admins can correct the match under **Settings → Activity assignment mapping**. Unmapped activities still count toward the opportunity owner's overdue/follow-up rules, because those rules key off the opportunity's sales rep.
 5. **`GET /sales-reps` lists only *current* employees with the Sales Rep role.** Former reps who still own opportunities are created from the embedded `sales_rep {id,name}` and marked inactive.
 6. **Opportunity name.** REST has `description` ("the name people see") and `number`. Webhook payloads also carry a `name` field (e.g. "Smith Kitchen Remodel") that the REST schema doesn't list. The app uses `description` (and falls back to `Job <number>`).
-7. **`revenue` is "expected value of the sale".** There is no contracted, invoiced or final amount. Won metrics are labeled **Won Sales**, not revenue in the accounting sense. A null `revenue` stays null: it's excluded from sums and averages, and the UI says how many were excluded.
+7. **`revenue` is "expected value of the sale".** There is no contracted or final amount (invoices, from webhooks only, are shown per job; see webhook gap 9). Won metrics are labeled **Won Sales**, not revenue in the accounting sense. A null `revenue` stays null: it's excluded from sums and averages, and the UI says how many were excluded.
 8. **`closed_at`** is "when it was won or lost". Behavior when a deal is reopened (moved back to a pending stage) isn't documented. The app takes whatever PB returns.
 9. **`created_date` is a date, not a timestamp**, with no documented time zone. It's treated as a company-local date (`COMPANY_TIMEZONE`).
 10. **`archived` semantics aren't documented.** PB list endpoints exclude archived records by default. The app imports them (`include_archived=true`), always excludes them from open pipeline, and excludes them from won/lost unless an admin turns on **Include archived** in Settings.
@@ -54,7 +54,12 @@ Questions and mismatches to send to Precise Builder are tracked in [PB_DOCS_FEED
 6. **`activity.*` payloads give the assignee as a name string (`assigned_to`)**, not an id. The processor ignores it and re-reads the opportunity's activities over REST.
 7. **The webhook endpoint and its secret are managed in the PB UI**, not through the API, so registration is manual (see README).
 8. **Payload retention.** Payloads contain customer contact details. PB keeps them for 14 days. This app clears stored payloads 30 days after processing (`prunePayloads`, run by reconciliation).
-9. **`invoice.created`, `vendor.*`** are stored and marked `ignored`. They're kept for future job-cost work.
+9. **Invoices and vendors exist only as webhooks.** PB has no REST endpoint for either, so:
+   - Invoices are stored from `invoice.created` and listed on the opportunity's page with an "Invoiced" total. Only invoices created after the webhook went live are known, and there's no way to import older ones.
+   - There's no invoice update, void or payment event. The `void` flag is as of creation, and paid or outstanding amounts aren't available.
+   - An invoice links to its opportunity through `job.id` (PB jobs and opportunities are the same record). If the opportunity isn't stored yet, it's fetched over REST. Invoices without a job are kept, unlinked.
+   - Invoiced totals aren't used in sales KPIs, because the data is partial.
+   - Vendors (`vendor.created` / `vendor.updated`) store only id, name and company. Contact details aren't kept. Nothing in the UI uses vendors yet beyond a count in Settings.
 
 ## Not used / out of scope
 

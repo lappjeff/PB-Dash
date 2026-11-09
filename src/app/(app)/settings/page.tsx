@@ -59,7 +59,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <div className="mt-3 rounded-lg bg-muted/50 p-3 text-xs">
             <div className="text-muted-foreground">Webhook endpoint to register in PB (Settings → Integrations → REST API → Webhooks):</div>
             <code className="mt-1 block break-all font-mono text-foreground">{webhookUrl}</code>
-            <div className="mt-1 text-muted-foreground">Subscribe to: customer.created, customer.updated, opportunity.created, opportunity.stage_updated, job.updated, activity.created, activity.completed.</div>
+            <div className="mt-1 text-muted-foreground">Subscribe to: customer.created, customer.updated, opportunity.created, opportunity.stage_updated, job.updated, activity.created, activity.completed, invoice.created, vendor.created, vendor.updated.</div>
           </div>
         </Section>
 
@@ -74,7 +74,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Last webhook received: {status.lastWebhookAt ? formatDateTime(status.lastWebhookAt, tz) : "never"}</p>
+            <p className="text-xs text-muted-foreground">
+              Last webhook received: {status.lastWebhookAt ? formatDateTime(status.lastWebhookAt, tz) : "never"} · Received from webhooks only: {status.invoiceCount} invoice{status.invoiceCount === 1 ? "" : "s"}, {status.vendorCount} vendor{status.vendorCount === 1 ? "" : "s"}
+            </p>
             {status.webhookProblems.length > 0 && (
               <div className="-mx-4 overflow-x-auto">
                 <table className="w-full text-xs">

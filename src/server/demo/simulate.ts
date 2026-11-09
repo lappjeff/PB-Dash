@@ -63,3 +63,39 @@ export async function simulateStageChanges(db: Db, count: number, opts: { spread
   await processPendingEvents({ db, client, tz: companyTimezone() }, { limit: 500 });
   return results.length;
 }
+
+/**
+ * DEMO ONLY. Sends signed invoice.created webhooks (fictional) for some won
+ * opportunities: a deposit and, for about half, a final invoice for the rest.
+ */
+export async function simulateInvoices(db: Db, count: number) {
+  const client = getDemoPbClient();
+  if (!client) throw new Error("Demo PB client not initialised");
+  const won = client.data.opportunities.filter((o) => o.status === "won" && !o.archived && o.revenue && o.closed_at).slice(0, count);
+  let n = 1001;
+  for (const opp of won) {
+    const closed = new Date(opp.closed_at!);
+    const parts = Math.random() < 0.5 ? [0.3] : [0.3, 0.7];
+    for (const [i, share] of parts.entries()) {
+      const date = new Date(closed.getTime() + i * 21 * 86_400_000);
+      if (date > new Date()) continue;
+      const id = crypto.randomUUID();
+      const envelope = {
+        id: crypto.randomUUID(),
+        type: "invoice.created",
+        account: "tdemo0000",
+        api_version: "2026-10",
+        created_at: date.toISOString().replace(/\.\d{3}Z$/, "+00:00"),
+        data: {
+          object: { type: "invoice", id },
+          invoice: { id, number: String(n++), type: "job", date: date.toISOString().slice(0, 10), due_date: new Date(date.getTime() + 30 * 86_400_000).toISOString().slice(0, 10), total: Math.round(opp.revenue! * share * 100) / 100, void: false },
+          customer: { id: opp.customer?.id, name: opp.customer?.name, email: null, phone: null },
+          job: { id: opp.id, name: opp.description },
+        },
+      };
+      const raw = JSON.stringify(envelope);
+      await ingestWebhook(db, { rawBody: raw, signatureHeader: signPreciseBody(raw, DEMO_WEBHOOK_SECRET), webhookIdHeader: envelope.id, secrets: [DEMO_WEBHOOK_SECRET], expectedAccount: null });
+    }
+  }
+  await processPendingEvents({ db, client, tz: companyTimezone() }, { limit: 500 });
+}

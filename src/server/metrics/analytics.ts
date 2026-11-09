@@ -206,6 +206,7 @@ export async function getSyncStatus(db: Db) {
     .orderBy(desc(webhookEvents.receivedAt))
     .limit(20);
   const [dataAsOf] = await rows<{ t: unknown }>(db, sql`select max(last_synced_at) as t from opportunities`);
+  const [webhookOnly] = await rows<{ invoices: unknown; vendors: unknown }>(db, sql`select (select count(*) from invoices)::int as invoices, (select count(*) from vendors)::int as vendors`);
   return {
     lastSuccessfulSync: lastSuccess ? { type: lastSuccess.syncType, completedAt: lastSuccess.completedAt?.toISOString() ?? null } : null,
     dataAsOf: dataAsOf?.t ? new Date(String(dataAsOf.t)).toISOString() : null,
@@ -221,6 +222,8 @@ export async function getSyncStatus(db: Db) {
     })),
     webhookCounts: Object.fromEntries(counts.map((c) => [c.status, toInt(c.n)])) as Record<string, number>,
     lastWebhookAt: lastEvent?.receivedAt.toISOString() ?? null,
+    invoiceCount: toInt(webhookOnly?.invoices),
+    vendorCount: toInt(webhookOnly?.vendors),
     webhookProblems: problems.map((p) => ({ ...p, receivedAt: p.receivedAt.toISOString(), nextAttemptAt: p.nextAttemptAt?.toISOString() ?? null })),
   };
 }

@@ -1,8 +1,9 @@
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { opportunities, salespeople, salesStages, stageTransitions, webhookEvents } from "@/db/schema";
+import { customers, invoices, opportunities, salespeople, salesStages, stageTransitions, vendors, webhookEvents } from "@/db/schema";
 import type { PbClient } from "@/server/pb/client";
-import { pbActivityEventData, pbStageUpdatedData, type PbWebhookEnvelope } from "@/server/pb/types";
+import { pbActivityEventData, pbInvoiceEventData, pbStageUpdatedData, pbVendorEventData, type PbWebhookEnvelope } from "@/server/pb/types";
+import { toCents } from "@/lib/money";
 import {
   markOpportunityMissing,
   recomputeStageEntered,
@@ -183,14 +184,88 @@ async function handleEvent(deps: ProcessDeps, refs: RefResolver, row: Row): Prom
       return { status: "processed" };
     }
 
-    case "invoice.created":
+    case "invoice.created": {
+      const data = pbInvoiceEventData.safeParse(payload?.data);
+      if (!data.success) throw new Error(`invoice payload did not match the documented schema: ${data.error.issues[0]?.path.join(".")}`);
+      return { status: "processed", note: await upsertInvoice(db, client, refs, data.data, eventAt) };
+    }
+
     case "vendor.created":
-    case "vendor.updated":
-      return { status: "ignored", note: "event type not used by this application" };
+    case "vendor.updated": {
+      const data = pbVendorEventData.safeParse(payload?.data);
+      if (!data.success) throw new Error(`vendor payload did not match the documented schema: ${data.error.issues[0]?.path.join(".")}`);
+      const v = data.data.vendor;
+      const values = { name: v.name ?? null, company: v.company ?? null, lastPbEventAt: eventAt, updatedAt: new Date() };
+      await db
+        .insert(vendors)
+        .values({ pbId: v.id, ...values })
+        .onConflictDoUpdate({
+          target: vendors.pbId,
+          set: values,
+          // A late or redelivered older event never overwrites newer details.
+          setWhere: sql`${vendors.lastPbEventAt} is null or ${vendors.lastPbEventAt} <= excluded.last_pb_event_at`,
+        });
+      return { status: "processed" };
+    }
 
     default:
       return { status: "ignored", note: `unknown event type "${row.eventType}"` };
   }
+}
+
+/**
+ * Stores an invoice from its invoice.created payload (PB has no invoice REST endpoint).
+ * Links it to the opportunity (PB jobs and opportunities are the same record), importing
+ * the opportunity first if this system hasn't seen it.
+ */
+async function upsertInvoice(
+  db: Db,
+  client: PbClient,
+  refs: RefResolver,
+  data: import("@/server/pb/types").PbInvoiceEventData,
+  eventAt: Date | null,
+): Promise<string | undefined> {
+  const inv = data.invoice;
+  const jobId = data.job?.id ?? null;
+  let note: string | undefined;
+  let opportunityId: number | null = null;
+  if (jobId) {
+    const [opp] = await db.select({ id: opportunities.id }).from(opportunities).where(eq(opportunities.pbId, jobId));
+    if (opp) opportunityId = opp.id;
+    else {
+      const o = await client.getOpportunity(jobId);
+      if (o) opportunityId = (await upsertOpportunity(db, refs, o, { fetchedAt: new Date(), eventAt })).id;
+      else note = "invoice's job not found in PB";
+    }
+  }
+  let customerId: number | null = null;
+  if (data.customer?.id) {
+    const [c] = await db.select({ id: customers.id }).from(customers).where(eq(customers.pbId, data.customer.id));
+    customerId = c?.id ?? null;
+  }
+  const values = {
+    number: inv.number ?? null,
+    type: inv.type ?? null,
+    invoiceDate: inv.date ?? null,
+    dueDate: inv.due_date ?? null,
+    totalCents: toCents(inv.total),
+    void: inv.void ?? false,
+    pbJobId: jobId,
+    opportunityId,
+    pbCustomerId: data.customer?.id ?? null,
+    customerId,
+    lastPbEventAt: eventAt,
+    updatedAt: new Date(),
+  };
+  await db
+    .insert(invoices)
+    .values({ pbId: inv.id, ...values })
+    .onConflictDoUpdate({
+      target: invoices.pbId,
+      set: values,
+      setWhere: sql`${invoices.lastPbEventAt} is null or ${invoices.lastPbEventAt} <= excluded.last_pb_event_at`,
+    });
+  return note;
 }
 
 /**
